@@ -1,0 +1,9 @@
+# Ignore API keys file
+utils/api_keys.json
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore user data
+user_data/
