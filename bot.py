@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-import json
 from telegram.ext import Application, CommandHandler
 from commands.start import start
 from commands.help import help_command

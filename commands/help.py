@@ -11,15 +11,16 @@ async def help_command(update: Update, context: CallbackContext) -> None:
 	update_user_credentials(user_id, telegram_user_data)
 	
 	await update.message.reply_text(
-		"📌 *Available Commands:*\n\n"
-		"/start - Start the bot.\n"
-		"/help - Show this help message.\n"
-		"/add - Add a steam account to tracing\n"
-		"/flush - Check available accounts for bans.\n"
-		"/remove - Remove an account from tracing.\n"
-		"/list - List of all availables accounts.\n"
-		"/startbancheck - Start the service to check bans each 6 hours.\n"
-		"/stopbancheck - Stop the service to check bans.\n",
+		"📌 **Available Commands**:\n\n"
+
+		"/start - Initiate the bot.\n"
+		"/help - Display this help message.\n"
+		"/add - Add a Steam account to be tracked.\n"
+		"/flush - Check for bans on tracked accounts.\n"
+		"/remove - Remove a Steam account from tracking.\n"
+		"/list - View all currently tracked accounts.\n"
+		"/startbancheck - Begin automatic ban checks every 6 hours.\n"
+		"/stopbancheck - Halt the automatic ban check service.\n",
 		# "/setinterval <hours> - Change check interval\n"
 		# "/status - Show current check settings\n",
 		parse_mode="Markdown"

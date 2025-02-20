@@ -11,6 +11,6 @@ async def start(update: Update, context: CallbackContext) -> None:
 	update_user_credentials(user_id, telegram_user_data)
 	
 	await update.message.reply_text(
-		"✅ Hello!\n\n"
-		"Use /help to see available commands."
+		"✅ Greetings!\n\n"
+		"Type /help to view the list of available commands."
 	)

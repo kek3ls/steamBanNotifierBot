@@ -22,12 +22,15 @@ async def convert_to_steamid64(input_str):
 		return profile_url_match.group(1)
 
 	# Try to match if it's a custom URL (e.g., steamcommunity.com/id/customURL)
-	custom_url_pattern = r"^https?://steamcommunity\.com/id/([a-zA-Z0-9_]+)$"
+	custom_url_pattern = r"^https?://steamcommunity\.com/id/([a-zA-Z0-9_]+)/*$"
+	print(f"Checking custom URL pattern for: {input_str}")  # Debug print before match
 	custom_url_match = re.match(custom_url_pattern, input_str)
 	if custom_url_match:
 		print(f"Matched custom URL: {custom_url_match.group(1)}")  # Debug print
 		custom_url = custom_url_match.group(1)
 		return await resolve_steamid_from_custom_url(custom_url)
+	else:
+		print(f"Custom URL match failed for: {input_str}")
 
 	# If it's already a SteamID64 (17-digit number), return it
 	if input_str.isdigit() and len(input_str) == 17:
