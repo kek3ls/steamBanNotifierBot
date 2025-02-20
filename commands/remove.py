@@ -28,12 +28,14 @@ async def remove(update: Update, context: CallbackContext) -> None:
 
 	data = load_data(user_id)  # Load only this user's tracked accounts
 
-	if context.args == "all":
+	message = context.args[0]
+
+	if message == "all":
 		data["tracked_accounts"] = []
 		save_data(user_id, data)
 		await update.message.reply_text("✅ All tracked accounts have been successfully removed.", parse_mode="Markdown")
 	else:
-		steam_id = await convert_to_steamid64(context.args[0])
+		steam_id = await convert_to_steamid64(message)
 
 		original_count = len(data["tracked_accounts"])
 		data["tracked_accounts"] = [acc for acc in data["tracked_accounts"] if acc["steamid"] != steam_id]
