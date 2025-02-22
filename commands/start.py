@@ -1,16 +1,22 @@
 from telegram import Update
 from telegram.ext import CallbackContext
-from utils.save_credentials import update_user_credentials, extract_telegram_user_data
+from utils.telegram_credentials import get as get_credentials
+from utils.telegram_credentials import write as write_credentials
 
 async def start(update: Update, context: CallbackContext) -> None:
-	# Extract user data and update credentials
 	user_id = update.message.from_user.id
-	telegram_user_data = extract_telegram_user_data(update.message.from_user)
-	
+
+	print(f"[DBG] start command received from user_id: {user_id}")
+
 	# Update the user's credentials in the JSON file
-	update_user_credentials(user_id, telegram_user_data)
-	
+	print(f"[DBG] Writing credentials for user_id: {user_id}")
+	write_credentials(user_id, get_credentials(update.message.from_user))
+
 	await update.message.reply_text(
-		"✅ Greetings!\n\n"
-		"Type /help to view the list of available commands."
+		"👋 <b>Greetings</b>!\n\n"
+		"Welcome to the bot! 🤖\n\n"
+		"To get started, type /help and explore the list of available commands. 📝",
+		parse_mode="HTML"
 	)
+
+	print(f"[INF] Greeting sent to user_id: {user_id}")

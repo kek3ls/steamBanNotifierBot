@@ -1,36 +1,41 @@
 from telegram import Update
+from utils.data_editor import load_data
 from telegram.ext import CallbackContext
 from telegram.constants import ParseMode
-from utils.data_editor import load_data
 from utils.steam_api import get_player_nickname
-from utils.save_credentials import update_user_credentials, extract_telegram_user_data
+from utils.telegram_credentials import get as get_credentials
+from utils.telegram_credentials import write as write_credentials
 
 async def list_accounts(update: Update, context: CallbackContext) -> None:
 	user_id = update.message.from_user.id  # Get the user's Telegram ID
 
-	# Extract the user's credentials from the Telegram update
-	telegram_user_data = extract_telegram_user_data(update.message.from_user)
+	print(f"[DBG] list_accounts command received for user_id: {user_id}")
 
 	# Update the user's credentials in the JSON file
-	update_user_credentials(user_id, telegram_user_data)
+	print(f"[DBG] Writing credentials for user_id: {user_id}")
+	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	data = load_data(user_id)  # Load the tracked accounts for this user
 
-	if not data["tracked_accounts"]:
+	if not data["trackedAccounts"]:
+		print(f"[WRN] No tracked accounts found for user_id: {user_id}")
 		await update.message.reply_text("ℹ️ You are not currently tracking any Steam accounts.")
 		return
 
 	message = "📋 <b>Your Tracked Steam Accounts:</b>\nClick the SteamID to view the profile.\n\n"
 
-	for account in data["tracked_accounts"]:
-		steamid64 = account["steamid"]
-		nickname = await get_player_nickname(steamid64)
+	for account in data["trackedAccounts"]:
+		steamid64 = account.get('steamid', None)
+		nickname = account.get('nickname', None)
 
 		# Display nickname if found, otherwise display SteamID64
 		if nickname:
+			print(f"[INF] Found nickname {nickname} for SteamID64: {steamid64}")
 			message += f"🔹 {nickname} (<a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>)\n"
 		else:
+			print(f"[WRN] No nickname found for SteamID64: {steamid64}")
 			message += f"🔹 <a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>\n"
 
 	# Send the formatted message with HTML parsing enabled
+	print(f"[INF] Sending list of tracked accounts to user_id: {user_id}")
 	await update.message.reply_text(message, parse_mode=ParseMode.HTML)

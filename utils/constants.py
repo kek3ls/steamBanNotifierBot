@@ -1,0 +1,1 @@
+WAITING_FOR_ACCOUNT = "waiting_for_account"
