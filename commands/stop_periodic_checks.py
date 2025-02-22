@@ -25,7 +25,7 @@ async def stop_ban_check(update: Update, context: CallbackContext):
 				print("[INF] No more active user tasks. Stopping global task.")
 				running_tasks["global"].cancel()  # Stop the global task
 				del running_tasks["global"]
-				await update.message.reply_text("🛑 <b>All periodic ban checks have been stopped</b>.")
+				await update.message.reply_text("🛑 <b>All periodic ban checks have been stopped</b>.", parse_mode="HTML")
 	else:
 		print(f"[WRN] No active ban check found for user_id: {user_id}")
-		await update.message.reply_text("⚠️ <b>No active ban checks are running</b> for your accounts.")
+		await update.message.reply_text("⚠️ <b>No active ban checks are running</b> for your accounts.", parse_mode="HTML")
