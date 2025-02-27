@@ -1,17 +1,11 @@
 from telegram import Update
 from telegram.ext import CallbackContext
 from commands.start_periodic_checks import running_tasks
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
 
 async def stop_ban_check(update: Update, context: CallbackContext):
 	user_id = update.message.chat_id  # Unique identifier for the user
 
 	print(f"[DBG] Received stop ban check request for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	# Check if the user has an active periodic check running
 	if user_id in running_tasks:

@@ -1,9 +1,7 @@
 import asyncio
 from telegram import Update
 from telegram.ext import CallbackContext
-from utils.telegram_credentials import get as get_credentials
 from utils.periodic_checks import periodic_ban_check, load_data
-from utils.telegram_credentials import write as write_credentials
 
 # Dictionary to keep track of running tasks per user
 running_tasks = {}
@@ -12,10 +10,6 @@ async def start_ban_check(update: Update, context: CallbackContext):
 	user_id = update.message.chat_id  # Unique identifier for the user
 
 	print(f"[DBG] start_ban_check command received for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	data = load_data(user_id)  # Load user-specific tracking data
 	interval_hours = data.get("interval_hours", 6)

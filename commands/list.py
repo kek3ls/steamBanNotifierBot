@@ -1,19 +1,11 @@
 from telegram import Update
 from utils.data_editor import load_data
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
-from utils.steam_api import get_player_nickname
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
 
 async def list_accounts(update: Update, context: CallbackContext) -> None:
 	user_id = update.message.from_user.id  # Get the user's Telegram ID
 
 	print(f"[DBG] list_accounts command received for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	data = load_data(user_id)  # Load the tracked accounts for this user
 
@@ -38,4 +30,4 @@ async def list_accounts(update: Update, context: CallbackContext) -> None:
 
 	# Send the formatted message with HTML parsing enabled
 	print(f"[INF] Sending list of tracked accounts to user_id: {user_id}")
-	await update.message.reply_text(message, parse_mode=ParseMode.HTML)
+	await update.message.reply_text(message, parse_mode="HTML")

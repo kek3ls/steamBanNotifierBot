@@ -1,19 +1,12 @@
 from telegram import Update
 from utils.data_editor import load_data
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
-from utils.steam_api import check_ban_status, get_player_nickname, to_steamid64
+from utils.steam_api import check_ban_status, to_steamid64
 
 async def flush(update: Update, context: CallbackContext):
 	user_id = update.message.from_user.id  # Get the user's Telegram ID
 
 	print(f"[DBG] flush command received from user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	data = load_data(user_id)  # Load only this user's tracked accounts
 
@@ -22,7 +15,7 @@ async def flush(update: Update, context: CallbackContext):
 		await update.message.reply_text("❌ You don't have any tracked accounts yet!")
 		return
 
-	await update.message.reply_text("🔄 Checking the ban status for your tracked accounts.", parse_mode=ParseMode.HTML)
+	await update.message.reply_text("🔄 Checking the ban status for your tracked accounts.", parse_mode="HTML")
 
 	banned_found = False  # Flag to track if any bans are found
 
@@ -60,4 +53,4 @@ async def flush(update: Update, context: CallbackContext):
 		print(f"[INF] No banned accounts found for user_id: {user_id}")
 
 	print(f"[INF] Sending ban status response to user_id: {user_id}")
-	await update.message.reply_text(response_message, parse_mode=ParseMode.HTML)
+	await update.message.reply_text(response_message, parse_mode="HTML")

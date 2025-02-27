@@ -1,24 +1,19 @@
-from telegram import Update
+from commands.cancel import cancel
+from utils.buttons import new_button
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
 from utils.steam_api import to_steamid64
 from utils.steam_api import check_ban_status
-from utils.constants import WAITING_FOR_ACCOUNT
 from utils.steam_api import get_player_summary
 from utils.message_handler import handle_message
+from telegram import Update, InlineKeyboardMarkup
 from utils.data_editor import save_data, load_data
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
 
 async def add_account(update: Update, context: CallbackContext):
-	"""Handles the /add command, waiting for an account if not provided."""
 	user_id = update.message.from_user.id
-
 	print(f"[DBG] add_account command received from user_id: {user_id}")
 
-	# Update user credentials
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	if context.user_data.get("WAITING_FOR_ACCOUNT_2_REMOVE", False):
+		return
 
 	# If user provided an argument, process it immediately
 	if context.args:
@@ -26,14 +21,18 @@ async def add_account(update: Update, context: CallbackContext):
 
 	# No account provided, ask user for input
 	print(f"[WRN] No Steam account input provided by user_id: {user_id}")
+	cancel_button = new_button("Cancel", cancel, user_id)
+	keyboard = InlineKeyboardMarkup([[cancel_button]])
+
 	await update.message.reply_text(
 		"⚠️ Oops! You need to provide a valid Steam account input.\n\n"
-		"Please send it now so we can add it to your tracked accounts.\n\n"
-		"🛑 If you want to cancel, use /cancel."
+		"Please send it now so we can add it to your tracked accounts.",
+		parse_mode="HTML",
+		reply_markup=keyboard
 	)
 
 	# Store waiting state
-	context.user_data[WAITING_FOR_ACCOUNT] = True
+	context.user_data["WAITING_FOR_ACCOUNT_2_ADD"] = True
 
 async def process_account(update: Update, context: CallbackContext, account_input: str):
 	"""Processes the provided Steam account and adds it to tracking."""
@@ -42,7 +41,7 @@ async def process_account(update: Update, context: CallbackContext, account_inpu
 
 	if not steamid64:
 		await update.message.reply_text("❌ Invalid Steam account! Please try again.")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+		context.user_data["WAITING_FOR_ACCOUNT_2_ADD"] = True  # Reset state
 		return
 
 	print(f"[DBG] Converted Steam account input to SteamID64: {steamid64}")
@@ -52,14 +51,14 @@ async def process_account(update: Update, context: CallbackContext, account_inpu
 	# Check if the account is already being tracked
 	if any(account["steamid"] == steamid64 for account in data["trackedAccounts"]):
 		await update.message.reply_text("🔁 This account is already being tracked!")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+		context.user_data["WAITING_FOR_ACCOUNT_2_ADD"] = False  # Reset state
 		return
 
 	# Fetch player summary details
 	player_summary = await get_player_summary(steamid64)
 	if player_summary is None:
-		await update.message.reply_text("❌ Unable to fetch Steam account details! Please try again.")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+		await update.message.reply_text("❌ Unable to fetch Steam account details! Please send an account again.")
+		context.user_data["WAITING_FOR_ACCOUNT_2_ADD"] = True  # Reset state
 		return
 
 	# Add account to the tracked list
@@ -98,11 +97,14 @@ async def process_account(update: Update, context: CallbackContext, account_inpu
 		parse_mode="HTML"
 	)
 
-	context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+	context.user_data["WAITING_FOR_ACCOUNT_2_ADD"] = False  # Reset state
 
 async def handle_waiting_account(update: Update, context: CallbackContext):
+	if context.user_data.get("WAITING_FOR_ACCOUNT_2_REMOVE", False):
+		return
+
 	"""Handles the next message when waiting for a Steam account input."""
-	if context.user_data.get(WAITING_FOR_ACCOUNT):
+	if context.user_data.get("WAITING_FOR_ACCOUNT_2_ADD", False):
 		return await process_account(update, context, update.message.text)
 
 	# If not waiting, treat it as a normal message

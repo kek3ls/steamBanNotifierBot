@@ -1,7 +1,5 @@
 from telegram import Update
 from telegram.ext import CallbackContext
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
 
 VALID_COMMANDS = [
 	"/start", "/help", "/add", "/flush", "/remove", "/list",
@@ -11,11 +9,7 @@ VALID_COMMANDS = [
 async def handle_message(update: Update, context: CallbackContext):
 	user_id = update.message.from_user.id  # Get the user's Telegram ID
 
-	print(f"[DBG] list_accounts command received for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	print(f"[DBG] a message received for user_id: {user_id}")
 
 	message = update.message
 
@@ -63,10 +57,6 @@ async def handle_unknown_command(update: Update, context: CallbackContext):
 	user_id = update.message.from_user.id  # Get the user's Telegram ID
 
 	print(f"[DBG] Unknown command received for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
 
 	# Extract the unknown command from the message
 	command = update.message.text.split()[0]  # Get the first word, which is the command
