@@ -1,31 +1,39 @@
+import asyncio
 from telegram import Update
+from utils.logger import debug_print
 from telegram.ext import CallbackContext
-from commands.start_periodic_checks import running_tasks
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
+from utils.periodic_checks import stateEditor, active_tasks, save_active_tasks
 
-async def stop_ban_check(update: Update, context: CallbackContext):
-	user_id = update.message.chat_id  # Unique identifier for the user
+async def stopbancheck_command(update: Update, context: CallbackContext):
+	"""Stops the periodic ban check for the user."""
+	userid = update.message.chat_id
+	debug_print("debug", f"stop_ban_check command requested by {userid}")
 
-	print(f"[DBG] Received stop ban check request for user_id: {user_id}")
+	# debug_print('debug', f"Active tasks before stopping: {active_tasks}")
 
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	if userid in active_tasks:
+		task = active_tasks[userid]
+		debug_print('debug', f"Task found for {userid}, done status: {task.done()}")
 
-	# Check if the user has an active periodic check running
-	if user_id in running_tasks:
-		print(f"[INF] Found active ban check for user_id: {user_id}. Stopping task.")
-		del running_tasks[user_id]  # Stop tracking the user's task
-		await update.message.reply_text("❌ <b>Ban check notifications have been stopped</b> for your tracked accounts.", parse_mode="HTML")
+		if not task.done():
+			debug_print('info', f"Stopping periodic ban check for {userid}")
+			task.cancel()  # Cancel the task
+			try:
+				await task  # Ensure the task is properly cancelled
+			except asyncio.CancelledError:
+				debug_print('info', f"Periodic ban check task for {userid} was canceled.")
 
-		# If no users are left with active checks, stop the global task
-		if not running_tasks:  # No more users with active checks
-			if "global" in running_tasks:
-				print("[INF] No more active user tasks. Stopping global task.")
-				running_tasks["global"].cancel()  # Stop the global task
-				del running_tasks["global"]
-				await update.message.reply_text("🛑 <b>All periodic ban checks have been stopped</b>.", parse_mode="HTML")
+			# Remove the task from the active_tasks dictionary and save state
+			del active_tasks[userid]
+			save_active_tasks()
+
+			await stateEditor(userid, False)  # Mark the state as False, meaning no active task.
+
+			# Inform the user
+			await update.message.reply_text("❌ <b>Ban check notifications have been stopped</b> for your tracked accounts.", parse_mode="HTML")
+		else:
+			debug_print('warning', f"Task for {userid} was already completed.")
+			await update.message.reply_text("⚠️ <b>No active ban checks are running</b> for your accounts.", parse_mode="HTML")
 	else:
-		print(f"[WRN] No active ban check found for user_id: {user_id}")
+		debug_print('warning', f"No active ban check found for {userid}")
 		await update.message.reply_text("⚠️ <b>No active ban checks are running</b> for your accounts.", parse_mode="HTML")

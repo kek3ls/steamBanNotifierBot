@@ -1,41 +1,54 @@
 from telegram import Update
+from utils.logger import debug_print
 from utils.data_editor import load_data
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
-from utils.steam_api import get_player_nickname
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
+from utils.steam_api import get_nickname
 
-async def list_accounts(update: Update, context: CallbackContext) -> None:
-	user_id = update.message.from_user.id  # Get the user's Telegram ID
+async def list_command(update: Update, context: CallbackContext) -> None:
+	userid = update.message.from_user.id
 
-	print(f"[DBG] list_accounts command received for user_id: {user_id}")
+	debug_print("debug", f"list command requested by {userid}")
 
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	sent_message = await update.message.reply_text("🔄 Fetching information, please wait.", parse_mode="HTML")
 
-	data = load_data(user_id)  # Load the tracked accounts for this user
+	data = await load_data(userid)
 
-	if not data["trackedAccounts"]:
-		print(f"[WRN] No tracked accounts found for user_id: {user_id}")
-		await update.message.reply_text("ℹ️ You are not currently tracking any Steam accounts.")
+	if not data:
+		await update.message.reply_text("⚠️ There was an error loading your accounts, please try again later!" \
+			"If you suspect a problem, use /<b>data</b> to review or delete your file.",
+			parse_mode="HTML"
+		)
 		return
 
-	message = "📋 <b>Your Tracked Steam Accounts:</b>\nClick the SteamID to view the profile.\n\n"
+	if not data["trackedAccounts"]:
+		debug_print("info", f"no tracked accounts found for {userid}")
+		await sent_message.edit_text(
+			"ℹ️ You are not currently tracking any Steam accounts, or there was an issue loading your data." \
+			"If you suspect a problem, use /<b>data</b> to review or delete your file.",
+			parse_mode="HTML"
+		)
+		return
+
+	message_list = ["📋 <b>Your tracked steam accounts</b>:\nClick the SteamID to view the profile.\n"]
 
 	for account in data["trackedAccounts"]:
-		steamid64 = account.get('steamid', None)
-		nickname = account.get('nickname', None)
+		steamid64 = account.get("steamid", None)
+
+		if not steamid64:
+			message_list.append(f"⚠️ unknown (There was an error parsing the SteamID64, try again later, please!)")
+			continue
+
+		display_name = await get_nickname(steamid64, userid)
 
 		# Display nickname if found, otherwise display SteamID64
-		if nickname:
-			print(f"[INF] Found nickname {nickname} for SteamID64: {steamid64}")
-			message += f"🔹 {nickname} (<a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>)\n"
+		if display_name:
+			message_list.append(f"🔹 {display_name} (<a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>)")
 		else:
-			print(f"[WRN] No nickname found for SteamID64: {steamid64}")
-			message += f"🔹 <a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>\n"
+			message_list.append(f"🔹 <a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>")
 
-	# Send the formatted message with HTML parsing enabled
-	print(f"[INF] Sending list of tracked accounts to user_id: {user_id}")
-	await update.message.reply_text(message, parse_mode=ParseMode.HTML)
+	# Join list into a single string
+	message = "\n".join(message_list)
+
+	# Edit the previously sent message with the account list
+	debug_print("info", f"Sending list of tracked accounts to {userid}")
+	await sent_message.edit_text(message, parse_mode="HTML")

@@ -1,35 +1,36 @@
 import asyncio
 from telegram import Update
+from utils.logger import debug_print
 from telegram.ext import CallbackContext
-from utils.telegram_credentials import get as get_credentials
-from utils.periodic_checks import periodic_ban_check, load_data
-from utils.telegram_credentials import write as write_credentials
+from utils.periodic_checks import periodic_ban_check, stateEditor, interval, active_tasks, save_active_tasks
 
-# Dictionary to keep track of running tasks per user
-running_tasks = {}
+async def startbancheck_command(update: Update, context: CallbackContext):
+	userid = update.message.chat_id
 
-async def start_ban_check(update: Update, context: CallbackContext):
-	user_id = update.message.chat_id  # Unique identifier for the user
+	debug_print('debug', f"start_ban_check command requested by {userid}")
 
-	print(f"[DBG] start_ban_check command received for user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
-
-	data = load_data(user_id)  # Load user-specific tracking data
-	interval_hours = data.get("interval_hours", 6)
+	interval_hours = await interval(userid)
 
 	# Check if a task is already running for this user
-	if user_id in running_tasks:
-		print(f"[WRN] A ban check is already running for user_id: {user_id}")
-		await update.message.reply_text("⚠️ A ban check is already running for your tracked accounts. Please wait for the current check to finish.")
-		return
+	if userid in active_tasks:
+		task = active_tasks[userid]
+		if not task.done():  # Only check if the task is not finished or canceled
+			debug_print('warning', f"A ban check is already running for {userid}")
+			await update.message.reply_text("⚠️ A ban check is already running for your tracked accounts.")
+			return
+		else:
+			# If the task is done, we remove it from active tasks
+			# Whether the task finished successfully or with an error, we should remove it
+			debug_print('info', f"Task for {userid} already completed with status: {task.done()} - removing task and restarting.")
+			del active_tasks[userid]  # Remove the completed task
 
 	# Start a periodic ban check task for this user
-	print(f"[DBG] Starting periodic ban check for user_id: {user_id}")
-	task = asyncio.create_task(periodic_ban_check(context.bot, user_id))  # Pass user_id if needed
-	running_tasks[user_id] = task  # Track the user's task
+	debug_print('debug', f"Starting periodic ban check for {userid}")
+	await stateEditor(userid, True)  # Mark the task as running
+
+	# Start the periodic task in the background using asyncio.create_task()
+	active_tasks[userid] = asyncio.create_task(periodic_ban_check(context.bot, userid))  # This runs in the background
+	save_active_tasks()  # Save active tasks after starting a new one
 
 	await update.message.reply_text(
 		f"✅ <b>Periodic ban checks</b> have been successfully started!\n\n"
@@ -38,4 +39,4 @@ async def start_ban_check(update: Update, context: CallbackContext):
 		parse_mode="HTML"
 	)
 
-	print(f"[INF] Periodic ban check started for user_id: {user_id} every {interval_hours} hours.")
+	debug_print('info', f"Periodic ban check started for {userid} every {interval_hours} hours.")

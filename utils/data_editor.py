@@ -1,51 +1,156 @@
 import os
 import json
+from utils.logger import debug_print
 
-# Get the file path for a specific user's data
-def get_user_file(user_id):
-	print(f"[DBG] Getting file path for user_id: {user_id}")
-	return f"user_data/{user_id}.json"
+PRIMARY_FOLDER = "userdata"
 
-# Load data from a user-specific JSON file
-def load_data(user_id):
-	file_path = get_user_file(user_id)
+# Get the file path to the user's data
+def get_user_file(userid:int):
+	# debug_print('debug', f"Getting file path for {userid}")
+	return f"{PRIMARY_FOLDER}/{userid}.json"
 
-	if not os.path.exists("user_data"):
-		print("[INF] Directory 'user_data' does not exist, creating it.")
-		os.makedirs("user_data")  # Ensure the directory exists
+async def validate(userid:int):
+	file_path = get_user_file(userid)
+
+	# Default structure for the 'globals' section
+	DEFAULT_GLOBALS = {
+		"isWaitingForAccount2Add": False,
+		"isWaitingForAccount2Remove": False,
+		"intervalHours": 6,
+		"periodicCheck": False
+	}
+
+	# Default structure for the 'trackedAccounts' section (should be a list)
+	DEFAULT_TRACKED_ACCOUNTS = []
+
+	# Default structure for the 'credentials' section (with required keys)
+	DEFAULT_CREDENTIALS = {
+		"username": None,
+		"id": None,
+		"name": {
+			"name": None,
+			"surname": None
+		},
+		"isBot": None,
+		"isPremium": None,
+		"languageCode": None,
+		"latestUpdate": None
+	}
 
 	try:
-		print(f"[DBG] Attempting to load data from: {file_path}")
+		# Load the existing user data
 		with open(file_path, "r", encoding="utf-8") as file:
 			data = json.load(file)
-			print(f"[INF] Successfully loaded data for user_id: {user_id}")
-			return data
-	except FileNotFoundError:
-		print(f"[WRN] File for user_id {user_id} not found. Returning default data.")
-		return {"trackedAccounts": []}  # Default empty list for new users
-	except json.JSONDecodeError:
-		print(f"[ERR] Error decoding JSON data from file for user_id {user_id}. Returning default data.")
-		return {"trackedAccounts": []}
 
-def save_data(user_id, data):
-	file_path = get_user_file(user_id)
+		# Ensure 'globals' section is present and non-empty
+		if not data.get("globals"):
+			debug_print('warning', "'globals' is missing or empty. Overwriting with default values.")
+			data["globals"] = DEFAULT_GLOBALS
+		elif not all(key in data["globals"] for key in DEFAULT_GLOBALS):
+			# If any key is missing from the existing "globals", we add missing keys with defaults
+			for key, value in DEFAULT_GLOBALS.items():
+				if key not in data["globals"]:
+					data["globals"][key] = value
+					debug_print('warning', f"Added missing key '{key}' to 'globals' with default value.")
+
+		# Ensure 'trackedAccounts' section is valid (it should be a list)
+		if "trackedAccounts" not in data:
+			data["trackedAccounts"] = DEFAULT_TRACKED_ACCOUNTS
+			debug_print('warning', "'trackedAccounts' is missing. Initializing it as an empty list.")
+
+		# Ensure 'credentials' section contains required keys and they are set to None if missing
+		if "credentials" not in data or not data["credentials"]:
+			data["credentials"] = DEFAULT_CREDENTIALS
+			debug_print('warning', "'credentials' is missing. Initializing it with default values.")
+		else:
+			# Fill missing keys in credentials with None
+			for key, value in DEFAULT_CREDENTIALS.items():
+				if key not in data["credentials"]:
+					data["credentials"][key] = value
+					debug_print('warning', f"Missing '{key}' in 'credentials'. Setting it to None.")
+
+		await save_data(userid, data)
+		return data
+
+	except (FileNotFoundError, json.JSONDecodeError) as e:
+		debug_print('error', f"Error decoding JSON data from file for {userid}: {str(e)}. Returning default data.")
+		# Return default data in case of error
+		return {
+			"credentials": DEFAULT_CREDENTIALS,
+			"trackedAccounts": DEFAULT_TRACKED_ACCOUNTS,
+			"globals": DEFAULT_GLOBALS
+		}
+
+async def load_data(userid:int):
+	file_path = get_user_file(userid)
+
+	# Default structure to return if file doesn't exist or is empty
+	DEFAULT_TABLE = {
+		"credentials": {
+			"username": None,
+			"id": None,
+			"name": {
+				"name": None,
+				"surname": None
+			},
+			"isBot": None,
+			"isPremium": None,
+			"languageCode": None,
+			"latestUpdate": None
+		},
+		"trackedAccounts": [],
+		"globals": {
+			"isWaitingForAccount2Add": False,
+			"isWaitingForAccount2Remove": False,
+			"intervalHours": 6,
+			"periodicCheck": False
+		}
+	}
+
+	if not os.path.exists(PRIMARY_FOLDER):
+		debug_print('info', f"Directory \"{PRIMARY_FOLDER}\" does not exist, creating it.")
+		os.makedirs(PRIMARY_FOLDER)  # Ensure the directory exists
 
 	try:
-		# Check if the file exists and if so, compare the data
-		if os.path.exists(file_path):
-			with open(file_path, "r", encoding="utf-8") as file:
-				existing_data = json.load(file)
+		debug_print('debug', f"Attempting to load data from: {file_path}")
 
-			# If the data is the same, do not save to avoid excessive disk usage
-			if existing_data == data:
-				print(f"[INF] Data for user_id {user_id} is the same. No need to save.")
-				return
+		# Check if file exists and is not empty
+		if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+			debug_print('warning', f"File for {userid} is empty or does not exist. Creating default data.")
 
-		# If data is different, save it
-		print(f"[DBG] Attempting to save data to: {file_path}")
-		with open(file_path, "w", encoding="utf-8") as file:
-			json.dump(data, file, indent="\t", ensure_ascii=False)
-			print(f"[INF] Successfully saved data for user_id: {user_id}")
+			# Create the file and write the default data
+			with open(file_path, "w", encoding="utf-8") as file:
+				json.dump(DEFAULT_TABLE, file, indent="\t", ensure_ascii=False)
+
+			return DEFAULT_TABLE
+
+		with open(file_path, "r", encoding="utf-8") as file:
+			data = json.load(file)
+
+			# Call the new function to validate and fix data
+			data = await validate(userid)
+
+			debug_print('info', f"Successfully loaded and validated data for {userid}")
+			return data
 
 	except Exception as e:
-		print(f"[ERR] Error saving data for user_id {user_id}: {e}")
+		debug_print('error', f"Error decoding JSON data from file for {userid}: {str(e)}. Returning default data.")
+		return DEFAULT_TABLE
+
+# Save the user's JSON file
+async def save_data(userid:int, data:dict):
+	file_path = get_user_file(userid)
+
+	try:
+		debug_print('debug', f"Attempting to save data to: {file_path}")
+
+		# Ensure the parent directory exists
+		os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+		# Write data safely
+		with open(file_path, "w", encoding="utf-8") as file:
+			json.dump(data, file, indent="\t", ensure_ascii=False)
+			debug_print('info', f"Successfully saved data for {userid}")
+
+	except Exception as e:
+		debug_print('error', f"Error saving data for {userid}: {e}")

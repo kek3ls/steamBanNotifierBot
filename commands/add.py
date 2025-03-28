@@ -1,109 +1,123 @@
-from telegram import Update
+from utils.buttons import new_button
+from utils.logger import debug_print
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
 from utils.steam_api import to_steamid64
 from utils.steam_api import check_ban_status
-from utils.constants import WAITING_FOR_ACCOUNT
-from utils.steam_api import get_player_summary
-from utils.message_handler import handle_message
+from telegram import Update, InlineKeyboardMarkup
 from utils.data_editor import save_data, load_data
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
+from utils.steam_api import get_account_summary, write_account_summary
 
-async def add_account(update: Update, context: CallbackContext):
-	"""Handles the /add command, waiting for an account if not provided."""
-	user_id = update.message.from_user.id
+async def add_command(update: Update, context: CallbackContext):
+	from commands.remove import accountWaiting as waitingForAccount2Remove
+	from commands.cancel import handle_cancel_button
 
-	print(f"[DBG] add_account command received from user_id: {user_id}")
+	userid = update.message.from_user.id
 
-	# Update user credentials
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	debug_print("debug", f"add command requested by {userid}")
+
+	buttons = [
+		[  # Each [] is new row
+			new_button("❌ Cancel", handle_cancel_button, "cancel")
+		]
+	]
+
+	if await accountWaiting(userid) or await waitingForAccount2Remove(userid):
+		return await update.message.reply_text(
+			"✋ You have an ongoing action, please /<b>cancel</b> it first.",
+			parse_mode="HTML",
+			reply_markup=InlineKeyboardMarkup(buttons)
+		)
+
+	data = await load_data(userid)
+
+	if len(data["trackedAccounts"]) >= 10:
+		await update.message.reply_text("⚠️ You\'ve reached the maximum limit of tracked accounts! (10)", parse_mode="HTML")
+		return
 
 	# If user provided an argument, process it immediately
 	if context.args:
+		await accountWaiting(userid, False)
 		return await process_account(update, context, context.args[0])
 
 	# No account provided, ask user for input
-	print(f"[WRN] No Steam account input provided by user_id: {user_id}")
+	debug_print("info", f"No Steam account input provided by {userid}")
 	await update.message.reply_text(
-		"⚠️ Oops! You need to provide a valid Steam account input.\n\n"
-		"Please send it now so we can add it to your tracked accounts.\n\n"
-		"🛑 If you want to cancel, use /cancel."
+		"❗ Oops! You need to provide a valid Steam account input.\n\n"
+		"Please send it now so it can be added into your tracked accounts.\n\n",
+		parse_mode="HTML",
+		reply_markup=InlineKeyboardMarkup(buttons)
 	)
 
-	# Store waiting state
-	context.user_data[WAITING_FOR_ACCOUNT] = True
+	await accountWaiting(userid, True)
 
-async def process_account(update: Update, context: CallbackContext, account_input: str):
-	"""Processes the provided Steam account and adds it to tracking."""
-	user_id = update.message.from_user.id
-	steamid64 = await to_steamid64(account_input)
+async def process_account(update: Update, context: CallbackContext, input: str):
+	userid = update.message.from_user.id
+	steamid64 = await to_steamid64(input)
 
 	if not steamid64:
 		await update.message.reply_text("❌ Invalid Steam account! Please try again.")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+		await accountWaiting(userid, False)  # Reset state
 		return
 
-	print(f"[DBG] Converted Steam account input to SteamID64: {steamid64}")
-
-	data = load_data(user_id)
-
-	# Check if the account is already being tracked
-	if any(account["steamid"] == steamid64 for account in data["trackedAccounts"]):
-		await update.message.reply_text("🔁 This account is already being tracked!")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
-		return
-
-	# Fetch player summary details
-	player_summary = await get_player_summary(steamid64)
-	if player_summary is None:
-		await update.message.reply_text("❌ Unable to fetch Steam account details! Please try again.")
-		context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
-		return
-
-	# Add account to the tracked list
-	account_info = {
-		"steamid": steamid64,
-		"isBanned": "Unknown",
-		"nickname": player_summary["nickname"],
-		"url": player_summary["profile_url"],
-		"avatar": player_summary["avatar"]
-	}
-
-	data["trackedAccounts"].append(account_info)
-	save_data(user_id, data)
-
-	print(f"[INF] Added SteamID64 {steamid64} to tracking for user_id: {user_id}")
-
-	# Check ban status after adding the account
-	ban_status = await check_ban_status(user_id, steamid64)
-
-	# Update the 'isBanned' field in the tracked account
-	for account in data["trackedAccounts"]:
-		if account["steamid"] == steamid64:
-			account["isBanned"] = False if ban_status == "No bans detected" else ban_status
-			break
-
-	# Save the updated data
-	save_data(user_id, data)
-
-	# Inform the user about the added account and its ban status
-	await update.message.reply_text(
-		f"✅ Success! {player_summary['nickname']} "
-		f"(<a href='{player_summary['profile_url']}'>{steamid64}</a>) "
-		f"has been added to your tracked accounts.\n\n"
-		f"🛑 Ban status: {ban_status or 'No bans detected'}\n\n"
-		"✨ You can use /startbancheck to get notifications if any of your tracked accounts gets banned.",
+	sent_message = await update.message.reply_text(
+		"🔄 Fetching information.\n\n"
+		"This is a <b>very heavy</b> process, be patient!\n\n"
+		"If you wish to see what information we collect during adding process, "
+		"you can follow this link: <a href='https://sample.com/'><b>click</b></a>",
 		parse_mode="HTML"
 	)
 
-	context.user_data.pop(WAITING_FOR_ACCOUNT, None)  # Reset state
+	debug_print("debug", f"Converted Steam account input to {steamid64}")
 
-async def handle_waiting_account(update: Update, context: CallbackContext):
-	"""Handles the next message when waiting for a Steam account input."""
-	if context.user_data.get(WAITING_FOR_ACCOUNT):
-		return await process_account(update, context, update.message.text)
+	data = await load_data(userid)
 
-	# If not waiting, treat it as a normal message
-	return await handle_message(update, context)
+	if len(data["trackedAccounts"]) >= 10:
+		await sent_message.edit_text("⚠️ You\'ve reached the maximum limit of tracked accounts! (10)", parse_mode="HTML")
+		await accountWaiting(userid, False)  # Reset state
+		return
+
+	# Check if the account is already being tracked
+	if any(account["steamid"] == steamid64 for account in data["trackedAccounts"]):
+		await sent_message.edit_text("🔁 This account is already being tracked!", parse_mode="HTML")
+		await accountWaiting(userid, False)  # Reset state
+		return
+
+	# Fetch player summary details
+	player_summary = await get_account_summary(steamid64)
+
+	if player_summary is None:
+		await sent_message.edit_text("❌ Unable to fetch Steam account details! Please try again.", parse_mode="HTML")
+		await accountWaiting(userid, False)  # Reset state
+		return
+
+	await write_account_summary(userid, steamid64, True)
+
+	debug_print("info", f"Added {steamid64} to tracking for {userid}")
+
+	# Check ban status after adding the account
+	ban_status = await check_ban_status(userid, steamid64)
+
+	# Inform the user about the added account and its ban status
+	await sent_message.edit_text(
+		f"✅ Success! {player_summary['nickname']} "
+		f"(<a href='{player_summary['profileURL']}'>{steamid64}</a>) "
+		f"has been added to your tracked accounts.\n\n"
+		f"Ban status: {ban_status or 'No bans detected'}\n\n"
+		"✨ You can use /<b>startbancheck</b> or /<b>startbc</b> to get notifications if any of your tracked accounts gets banned.",
+		parse_mode="HTML"
+	)
+
+	await accountWaiting(userid, False)
+
+async def accountWaiting(userid:int, state: bool = None):
+	data = await load_data(userid)
+
+	# isWaitingForAccount2Add = str(data["globals"]["isWaitingForAccount2Add"])
+
+	if state is None:
+		# debug_print('info', f"isWaitingForAccount2Add == " + isWaitingForAccount2Add)
+		return data["globals"]["isWaitingForAccount2Add"]
+	else:
+		# debug_print('info', f"isWaitingForAccount2Add = {state}")
+		data["globals"]["isWaitingForAccount2Add"] = state
+		await save_data(userid, data)

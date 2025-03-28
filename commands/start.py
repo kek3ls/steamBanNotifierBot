@@ -1,22 +1,21 @@
 from telegram import Update
+from utils.logger import debug_print
 from telegram.ext import CallbackContext
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
 
-async def start(update: Update, context: CallbackContext) -> None:
-	user_id = update.message.from_user.id
+async def start_command(update: Update, context: CallbackContext) -> None:
+	userid = update.message.from_user.id
 
-	print(f"[DBG] start command received from user_id: {user_id}")
-
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	debug_print("debug", f"start command requested by {userid}")
 
 	await update.message.reply_text(
-		"👋 <b>Greetings</b>!\n\n"
-		"Welcome to the bot! 🤖\n\n"
-		"To get started, type /help and explore the list of available commands. 📝",
-		parse_mode="HTML"
+		"👋 <b>Greetings</b> and <b>welcome</b>! 🎉\n\n" \
+		"Before diving in, we highly recommend reviewing our " \
+		"<a href='https://steambannotifierbot.k3ls.ru/privacyPolicy'><b>Privacy Policy</b></a>, " \
+		"to fully understand how <b>we collect</b> and handle <b>your data</b>. 🔒\n\n" \
+		"Rest assured, the /<b>start</b> and /<b>help</b> commands does <b>not</b> collect <b>any personal data</b>.\n" \
+		"You can use them freely to explore the available features! 📝🚀\n\n" \
+		"Once you're ready, type /<b>help</b> to get started and see the list of commands."
+		,parse_mode="HTML" # keep the comma before "parse_mode" in case of adding any more lines
 	)
 
-	print(f"[INF] Greeting sent to user_id: {user_id}")
+	debug_print("info", f"start sent to {userid}")

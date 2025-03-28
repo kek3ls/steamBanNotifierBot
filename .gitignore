@@ -1,9 +1,22 @@
 # Ignore API keys file
 utils/api_keys.json
+.env
 
 # Ignore Python cache files
 __pycache__/
 *.pyc
 
 # Ignore user data
-user_data/
+userdata/
+
+# Ignore logs
+logs/
+
+# Ignore VSCode files
+.vscode/
+
+# Ignore active tasks
+active_tasks.json
+
+# Unused features
+messages.json

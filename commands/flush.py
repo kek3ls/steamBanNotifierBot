@@ -1,63 +1,77 @@
 from telegram import Update
+from utils.logger import debug_print
 from utils.data_editor import load_data
 from telegram.ext import CallbackContext
-from telegram.constants import ParseMode
-from utils.telegram_credentials import get as get_credentials
-from utils.telegram_credentials import write as write_credentials
-from utils.steam_api import check_ban_status, get_player_nickname, to_steamid64
+from utils.steam_api import check_ban_status, get_nickname, write_account_summary
 
-async def flush(update: Update, context: CallbackContext):
-	user_id = update.message.from_user.id  # Get the user's Telegram ID
+async def flush_command(update: Update, context: CallbackContext):
+	userid = update.message.from_user.id
 
-	print(f"[DBG] flush command received from user_id: {user_id}")
+	debug_print("debug", f"flush command requested by {userid}")
 
-	# Update the user's credentials in the JSON file
-	print(f"[DBG] Writing credentials for user_id: {user_id}")
-	write_credentials(user_id, get_credentials(update.message.from_user))
+	sent_message = await update.message.reply_text("🔄 Fetching ban information.\n\n" \
+		"This is a heavy process, be patient!", parse_mode="HTML")
 
-	data = load_data(user_id)  # Load only this user's tracked accounts
+	data = await load_data(userid)
 
-	if not data["trackedAccounts"]:
-		print(f"[WRN] No tracked accounts found for user_id: {user_id}")
-		await update.message.reply_text("❌ You don't have any tracked accounts yet!")
+	if not data:
+		await update.message.reply_text("⚠️ There was an error loading your accounts, please try again later!" \
+			"If you suspect a problem, use /<b>data</b> to review or delete your file.",
+			parse_mode="HTML"
+		)
 		return
 
-	await update.message.reply_text("🔄 Checking the ban status for your tracked accounts.", parse_mode=ParseMode.HTML)
+	if not data["trackedAccounts"]:
+		debug_print("info", f"no tracked accounts found for {userid}")
+		await sent_message.edit_text(
+			"ℹ️ You are not currently tracking any Steam accounts, or there was an issue loading your data." \
+			"If you suspect a problem, use /<b>data</b> to review or delete your file.",
+			parse_mode="HTML"
+		)
+		return
 
-	banned_found = False  # Flag to track if any bans are found
+	banned_found = False
 
-	response_message = ""
+	message_list = ["📋 <b>Your tracked steam accounts</b>:\nClick the SteamID to view the profile.\n"]
 
 	for account in data["trackedAccounts"]:
-		# Convert SteamID from various formats (URL, SteamID3, etc.) to SteamID64
-		steamid64 = await to_steamid64(account["steamid"])
+		steamid64 = account["steamid"]
 
 		if not steamid64:
-			response_message += f"⚠️ Invalid Steam account format: {account['steamid']}\n"
+			message_list.append(f"⚠️ unknown (There was an error parsing the SteamID64, try again later, please!)")
 			continue
 
-		# Fetch the nickname or display name of the account
-		nickname = account.get('nickname', None)
-		display_name = nickname if nickname else steamid64
+		await write_account_summary(userid, steamid64)
+		display_name = await get_nickname(steamid64, userid)
 
 		try:
-			ban_state = await check_ban_status(user_id, steamid64)
+			ban_state = await check_ban_status(userid, steamid64)
 
-			if ban_state:
-				banned_found = True
-				steam_profile_url = f"https://steamcommunity.com/profiles/{steamid64}"
-				response_message += f"<a href='{steam_profile_url}'>{display_name}</a>: {ban_state}\n"
+			if not ban_state:
+				ban_state = "❌ No bans found!"
 			else:
-				steam_profile_url = f"https://steamcommunity.com/profiles/{steamid64}"
-				response_message += f"<a href='{steam_profile_url}'>{display_name}</a>: No ban found\n"
+				banned_found = True
+				ban_state = "✅ " + ban_state
 
+			steam_profile_url = f"https://steamcommunity.com/profiles/{steamid64}"
+
+			if display_name:
+				message_list.append(f"{display_name} (<a href='{steam_profile_url}'>{steamid64}</a>): {ban_state}\n")
+			else:
+				message_list.append(f"<a href='{steam_profile_url}'>{steamid64}</a>: {ban_state}\n")
 		except Exception as e:
-			print(f"[ERR] Error checking ban for SteamID {steamid64}: {e}")
-			response_message += f"⚠️ Error checking ban for <a href='https://steamcommunity.com/profiles/{steamid64}'>SteamID {steamid64}</a>: {e}\n"
+			debug_print("error", f"Error checking ban for SteamID {steamid64}: {e}")
+
+			if display_name:
+				message_list.append(f"{display_name} (<a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a>) ⚠️ There was an error, try again later!\n")
+			else:
+				message_list.append(f"<a href='https://steamcommunity.com/profiles/{steamid64}'>{steamid64}</a> ⚠️ There was an error, try again later!\n")
+
+	message = "\n".join(message_list)
 
 	if not banned_found:
-		response_message = "❌ No banned accounts found in your tracked list."
-		print(f"[INF] No banned accounts found for user_id: {user_id}")
+		debug_print("info", f"no banned accounts found for {userid}")
+		message = "❌ No banned accounts found in your tracking accounts."
 
-	print(f"[INF] Sending ban status response to user_id: {user_id}")
-	await update.message.reply_text(response_message, parse_mode=ParseMode.HTML)
+	debug_print("info", f"Sending ban status response to {userid}")
+	await sent_message.edit_text(message, parse_mode="HTML")

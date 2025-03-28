@@ -1,13 +1,21 @@
-import json
+from dotenv import load_dotenv
+from os import getenv as get_env_var
+from utils.logger import debug_print
 
-def load_api_keys():
-	with open("utils/api_keys.json", "r") as file:
-		data = json.load(file)
+load_dotenv()
 
-	telegram_key = data.get("TelegramBotApiKey", [{}])[0].get("value", "")
-	steam_key = data.get("SteamAPIKey", [{}])[0].get("value", "")
+class MissingAPIKey(Exception):
+	pass
 
-	return telegram_key, steam_key
+def get_api_key(env_var):
+	key = get_env_var(env_var, None)
 
-# Load both keys
-TELEGRAM_BOT_KEY, STEAM_API_KEY = load_api_keys()
+	if not key:
+		raise MissingAPIKey(f"{env_var} API key is missing or invalid.")
+
+	return key
+
+TELEGRAM_BOT_KEY = get_api_key("Telegram")
+STEAM_API_KEY = get_api_key("Steam")
+
+debug_print("info", "API keys are valid, continuing the execution...")
